@@ -25,4 +25,5 @@ guia/
 
 # Ignorar archivos de caché de Python
 __pycache__/
+*.py
 *.pyc
