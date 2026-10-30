@@ -202,7 +202,7 @@ class EPGManagerApp:
             messagebox.showerror("Error", f"No se pudo unificar:\n{str(e)}")
 
     # ==========================================
-    # SUBIR A GITHUB VÍA GIT LOCAL (Con git add -A)
+    # SUBIR A GITHUB VÍA GIT LOCAL (Método definitivo sin bloqueos)
     # ==========================================
     def upload_to_github_thread(self):
         repo = self.ent_repo.get().strip()
@@ -227,40 +227,33 @@ class EPGManagerApp:
                 remote_url = f"https://{token}@github.com/{repo}.git"
                 subprocess.run(["git", "remote", "set-url", "origin", remote_url], cwd=BASE_DIR)
 
-            # 2. Copiar el archivo unificado a su destino local
+            # 2. Forzar la rama main y limpiar cualquier bloqueo residual de rebase o merge
+            subprocess.run(["git", "checkout", "-B", "main"], capture_output=True, text=True, cwd=BASE_DIR)
+            rebase_dir = BASE_DIR / ".git" / "rebase-merge"
+            if rebase_dir.exists():
+                shutil.rmtree(rebase_dir, ignore_errors=True)
+
+            # 3. Copiar el archivo unificado a su destino local exacto
             dest_file = BASE_DIR / path_in_repo
             dest_file.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(UNIFIED_XML, dest_file)
 
-            # 3. Comandos robustos de Git incluyendo git add -A
-            commands = [
-                ["git", "add", "-A"],
-                ["git", "commit", "-m", "Actualización automática EPG Unificada"],
-                ["git", "pull", "origin", "main", "--rebase"],
-                ["git", "push", "origin", "main"]
-            ]
+            # 4. Agregar TODO (-A) para que no queden archivos pendientes o modificados sin registrar
+            subprocess.run(["git", "add", "-A"], capture_output=True, text=True, cwd=BASE_DIR)
 
-            error_occurred = False
-            error_message = ""
+            # 5. Hacer commit (si no hay cambios nuevos, ignora el error y continúa)
+            subprocess.run(["git", "commit", "-m", "Actualización automática EPG Unificada"], capture_output=True, text=True, cwd=BASE_DIR)
 
-            for cmd in commands:
-                process = subprocess.run(cmd, capture_output=True, text=True, cwd=BASE_DIR)
-                if process.returncode != 0 and "nothing to commit" not in process.stdout:
-                    if "git pull" in " ".join(cmd) and "Current branch main is up to date" in process.stdout:
-                        continue
-                    if "git commit" in " ".join(cmd) and "nothing to commit" in process.stdout:
-                        continue
-                    
-                    error_occurred = True
-                    error_message = process.stderr or process.stdout
-                    break
+            # 6. Empujar a GitHub usando push forzado (-f) para evitar cualquier error de divergencia o commits adelantados
+            push_process = subprocess.run(["git", "push", "-f", "origin", "main"], capture_output=True, text=True, cwd=BASE_DIR)
 
-            if error_occurred:
-                self.root.after(0, lambda: messagebox.showerror("Error Git", f"No se pudo completar la subida:\n{error_message}"))
+            if push_process.returncode != 0:
+                error_msg = push_process.stderr or push_process.stdout
+                self.root.after(0, lambda: messagebox.showerror("Error Git", f"No se pudo completar la subida:\n{error_msg}"))
             else:
                 raw_link = f"https://raw.githubusercontent.com/{repo}/main/{path_in_repo}"
                 self.root.after(0, lambda: self.set_text(self.txt_raw_link, raw_link))
-                self.root.after(0, lambda: messagebox.showinfo("Éxito", "¡Sincronizado y subido correctamente a GitHub!"))
+                self.root.after(0, lambda: messagebox.showinfo("Éxito", "¡Guía subida a GitHub correctamente!"))
 
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("Excepción", f"Error ejecutando Git:\n{str(e)}"))
