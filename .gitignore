@@ -11,3 +11,18 @@ errores_gatotv.txt
 venv/
 ENV/
 
+# Ignorar carpetas de descarga y scrapers individuales pesados
+gatotv/
+mitv/
+iptv-epg/
+reservado/
+epg/
+guia/
+
+# Ignorar XMLs locales sueltos o temporales
+*.xml
+!update_guia/guia_unificada.xml
+
+# Ignorar archivos de caché de Python
+__pycache__/
+*.pyc
